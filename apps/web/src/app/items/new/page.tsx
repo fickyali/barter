@@ -347,7 +347,8 @@ function NewItemPageInner() {
                       <input
                         className="hidden"
                         type="file"
-                        accept="image/jpeg,image/png"
+                        accept="image/*"
+                        capture="environment"
                         onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
                       />
                     </label>
