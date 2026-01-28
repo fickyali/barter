@@ -342,16 +342,28 @@ function NewItemPageInner() {
                       JPG/PNG • Maksimal 1 MB • Akan dikompres otomatis bila perlu
                     </p>
 
-                    <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
-                      Pilih Foto
-                      <input
-                        className="hidden"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
-                      />
-                    </label>
+
+                    <div className="flex gap-2 mt-3">
+                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                        Pilih Foto
+                        <input
+                          className="hidden"
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                        Buka Kamera
+                        <input
+                          className="hidden"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                    </div>
 
                     <div className="mt-2 text-xs text-muted-strong">
                       {imageFile ? `Terpilih: ${imageFile.name}` : 'Belum ada file dipilih'}

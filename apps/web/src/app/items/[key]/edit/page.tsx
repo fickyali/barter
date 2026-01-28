@@ -489,16 +489,27 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                       </p>
                       <p className="mt-1 text-xs text-muted">Kalau tidak upload, foto lama tetap dipakai.</p>
 
-                      <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
-                        {imageFile ? 'Ganti Foto' : 'Pilih Foto'}
-                        <input
-                          className="hidden"
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
+                      <div className="flex gap-2 mt-3">
+                        <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                          {imageFile ? 'Ganti Foto' : 'Pilih Foto'}
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                          Buka Kamera
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                      </div>
 
                       {imageFile ? (
                         <button
