@@ -102,17 +102,19 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
 
+    setError(null);
+
     if (!file) {
       setImageFile(null);
       setImagePreviewUrl(null);
       return;
     }
 
-    // Extra validation for camera capture
-    if (!file.type.startsWith('image/') || file.size === 0) {
+    // Robust validation for camera capture
+    if (!file.type || !file.type.startsWith('image/') || file.size === 0) {
       setImageFile(null);
       setImagePreviewUrl(null);
-      setError('Foto dari kamera gagal dibaca. Silakan coba lagi atau gunakan Pilih Foto.');
+      setError('Foto dari kamera gagal dibaca atau kosong. Silakan coba lagi, pastikan kamera diizinkan, atau gunakan Pilih Foto.');
       console.error('Invalid camera file:', file);
       return;
     }
@@ -276,6 +278,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     const updateRes = await supabase.from('items').update(payload).eq('id', item.id);
     const updateError = updateRes.error;
 
+
     setSaving(false);
 
     if (updateError) {
@@ -283,10 +286,11 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       return;
     }
 
-    // Reset image state after successful submit
+    // Reset image state after successful submit (including error)
     setImageFile(null);
     setImagePreviewUrl(null);
     setRemoveExistingImage(false);
+    setError(null);
 
     // If user uploaded a new image, clean up older files that share the same slug base.
     // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
