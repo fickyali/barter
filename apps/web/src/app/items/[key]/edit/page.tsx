@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { formatIdr, formatIdrFromUnknown, parseIdrToNumber } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
+import { useImageUpload } from './useImageUpload';
 import { isSlug } from '@/lib/slug';
 import { extractPublicBucketObjectPath } from '@/lib/storage';
 import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
@@ -74,15 +75,22 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
   const [condition, setCondition] = useState('');
   const [wantedItem, setWantedItem] = useState('');
   const [barterPrice, setBarterPrice] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
-  const previewUrlRef = useRef<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // Use custom hook for image upload state/logic
+  const {
+    imageFile,
+    imagePreviewUrl,
+    error,
+    setImageFile,
+    setImagePreviewUrl,
+    setError,
+    onPickImageFile,
+    reset: resetImageUpload,
+  } = useImageUpload();
 
   const isAdmin = useMemo(() => Boolean(me?.is_admin), [me?.is_admin]);
   const keyIsValid = useMemo(() => isUuid(key) || isSlug(key), [key]);
@@ -92,40 +100,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     return item.user_id === userId;
   }, [item, user]);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    };
-  }, []);
 
-  function onPickImageFile(file: File | null) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    previewUrlRef.current = null;
-
-    setError(null);
-
-    if (!file) {
-      setImageFile(null);
-      setImagePreviewUrl(null);
-      return;
-    }
-
-    // Robust validation for camera capture
-    if (!file.type || !file.type.startsWith('image/') || file.size === 0) {
-      setImageFile(null);
-      setImagePreviewUrl(null);
-      setError('Foto dari kamera gagal dibaca atau kosong. Silakan coba lagi, pastikan kamera diizinkan, atau gunakan Pilih Foto.');
-      console.error('Invalid camera file:', file);
-      return;
-    }
-
-    setImageFile(file);
-    const url = URL.createObjectURL(file);
-    // Add cache-busting param to preview URL
-    const cacheBustedUrl = url + '?t=' + Date.now();
-    previewUrlRef.current = url;
-    setImagePreviewUrl(cacheBustedUrl);
-  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -174,7 +149,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       setCondition(loadedItem.condition);
       setWantedItem(loadedItem.wanted_item ?? '');
       setBarterPrice(formatIdrFromUnknown(loadedItem.barter_price) ?? '');
-      onPickImageFile(null);
+      resetImageUpload();
       setRemoveExistingImage(false);
 
       setLoading(false);
@@ -287,10 +262,8 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     }
 
     // Reset image state after successful submit (including error)
-    setImageFile(null);
-    setImagePreviewUrl(null);
+    resetImageUpload();
     setRemoveExistingImage(false);
-    setError(null);
 
     // If user uploaded a new image, clean up older files that share the same slug base.
     // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
@@ -582,7 +555,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                       type="button"
                       className="absolute top-0 right-0 m-1 rounded-full bg-danger text-white w-7 h-7 flex items-center justify-center shadow"
                       title="Hapus gambar ini"
-                      onClick={() => { setRemoveExistingImage(true); setImagePreviewUrl(null); setImageFile(null); }}
+                      onClick={() => { setRemoveExistingImage(true); resetImageUpload(); }}
                     >
                       ×
                     </button>
