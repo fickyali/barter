@@ -119,8 +119,10 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
 
     setImageFile(file);
     const url = URL.createObjectURL(file);
+    // Add cache-busting param to preview URL
+    const cacheBustedUrl = url + '?t=' + Date.now();
     previewUrlRef.current = url;
-    setImagePreviewUrl(url);
+    setImagePreviewUrl(cacheBustedUrl);
   }
 
   useEffect(() => {
@@ -280,6 +282,11 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       setError(updateError.message);
       return;
     }
+
+    // Reset image state after successful submit
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setRemoveExistingImage(false);
 
     // If user uploaded a new image, clean up older files that share the same slug base.
     // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
@@ -561,7 +568,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                 ) : (!removeExistingImage && item?.image_url) ? (
                   <div className="relative mt-3 inline-block overflow-hidden rounded-xl border border-border bg-surface2">
                     <Image
-                      src={item.image_url}
+                      src={item.image_url + '?t=' + Date.now()}
                       alt="Foto saat ini"
                       width={320}
                       height={320}
