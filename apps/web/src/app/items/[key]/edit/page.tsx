@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { formatIdr, formatIdrFromUnknown, parseIdrToNumber } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
+import { useImageUpload } from '../useImageUpload';
 import { isSlug } from '@/lib/slug';
 import { extractPublicBucketObjectPath } from '@/lib/storage';
 import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
@@ -31,6 +32,8 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
 }
 
 function EditItemPageInner({ params }: { params: { key: string } }) {
+    // Deteksi mobile/tablet untuk show/hide tombol kamera
+    const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
   const { key } = use(params as unknown as Promise<{ key: string }>);
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
@@ -72,15 +75,22 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
   const [condition, setCondition] = useState('');
   const [wantedItem, setWantedItem] = useState('');
   const [barterPrice, setBarterPrice] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
-  const previewUrlRef = useRef<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // Use custom hook for image upload state/logic
+  const {
+    imageFile,
+    imagePreviewUrl,
+    error,
+    setImageFile,
+    setImagePreviewUrl,
+    setError,
+    onPickImageFile,
+    reset: resetImageUpload,
+  } = useImageUpload();
 
   const isAdmin = useMemo(() => Boolean(me?.is_admin), [me?.is_admin]);
   const keyIsValid = useMemo(() => isUuid(key) || isSlug(key), [key]);
@@ -90,26 +100,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     return item.user_id === userId;
   }, [item, user]);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    };
-  }, []);
 
-  function onPickImageFile(file: File | null) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    previewUrlRef.current = null;
-
-    setImageFile(file);
-    if (!file) {
-      setImagePreviewUrl(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(file);
-    previewUrlRef.current = url;
-    setImagePreviewUrl(url);
-  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -158,7 +149,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       setCondition(loadedItem.condition);
       setWantedItem(loadedItem.wanted_item ?? '');
       setBarterPrice(formatIdrFromUnknown(loadedItem.barter_price) ?? '');
-      onPickImageFile(null);
+      resetImageUpload();
       setRemoveExistingImage(false);
 
       setLoading(false);
@@ -262,12 +253,17 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     const updateRes = await supabase.from('items').update(payload).eq('id', item.id);
     const updateError = updateRes.error;
 
+
     setSaving(false);
 
     if (updateError) {
       setError(updateError.message);
       return;
     }
+
+    // Reset image state after successful submit (including error)
+    resetImageUpload();
+    setRemoveExistingImage(false);
 
     // If user uploaded a new image, clean up older files that share the same slug base.
     // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
@@ -489,15 +485,29 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                       </p>
                       <p className="mt-1 text-xs text-muted">Kalau tidak upload, foto lama tetap dipakai.</p>
 
-                      <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
-                        {imageFile ? 'Ganti Foto' : 'Pilih Foto'}
-                        <input
-                          className="hidden"
-                          type="file"
-                          accept="image/jpeg,image/png"
-                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
+                      <div className="flex gap-2 mt-3">
+                        <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                          {imageFile ? 'Ganti Foto' : 'Pilih Foto'}
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {isMobile && (
+                          <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                            Buka Kamera
+                            <input
+                              className="hidden"
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                        )}
+                      </div>
 
                       {imageFile ? (
                         <button
@@ -535,7 +545,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                 ) : (!removeExistingImage && item?.image_url) ? (
                   <div className="relative mt-3 inline-block overflow-hidden rounded-xl border border-border bg-surface2">
                     <Image
-                      src={item.image_url}
+                      src={item.image_url + '?t=' + Date.now()}
                       alt="Foto saat ini"
                       width={320}
                       height={320}
@@ -545,7 +555,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                       type="button"
                       className="absolute top-0 right-0 m-1 rounded-full bg-danger text-white w-7 h-7 flex items-center justify-center shadow"
                       title="Hapus gambar ini"
-                      onClick={() => { setRemoveExistingImage(true); setImagePreviewUrl(null); setImageFile(null); }}
+                      onClick={() => { setRemoveExistingImage(true); resetImageUpload(); }}
                     >
                       ×
                     </button>
