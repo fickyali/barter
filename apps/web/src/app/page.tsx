@@ -154,7 +154,7 @@ export default function HomePage() {
                   <Link href="/items/new">
                     <Button
                       variant="primary"
-                      size="icon"
+                      size="sm"
                       className="rounded-full w-10 h-10 p-0 justify-center items-center text-xl"
                       aria-label="Tambah Item"
                     >
