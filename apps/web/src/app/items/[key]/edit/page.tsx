@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { formatIdr, formatIdrFromUnknown, parseIdrToNumber } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
-import { useImageUpload } from './useImageUpload';
+import { useImageUpload } from '../useImageUpload';
 import { isSlug } from '@/lib/slug';
 import { extractPublicBucketObjectPath } from '@/lib/storage';
 import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
