@@ -1,7 +1,7 @@
 'use client';
 
 import type { PostgrestError } from '@supabase/supabase-js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Loading } from '@/components/Loading';
@@ -21,6 +21,27 @@ export default function NewItemPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
 
+  const categoryOptions = useMemo(
+    () =>
+      [
+        'Elektronik & Gadget',
+        'Fashion & Aksesoris',
+        'Hobi & Koleksi',
+        'Perabotan Rumah Tangga',
+        'Mainan Anak',
+        'Kendaraan & Otomotif',
+        'Voucher & Digital',
+        'Jasa',
+        'Lainnya',
+      ] as const,
+    []
+  );
+
+  const conditionOptions = useMemo(
+    () => ['Baru', 'Like New', 'Bekas Pakai', 'Rusak ringan', 'Seadanya'] as const,
+    []
+  );
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const isAdmin = useMemo(() => Boolean(profile?.is_admin), [profile?.is_admin]);
 
@@ -32,30 +53,38 @@ export default function NewItemPage() {
   const [barterPrice, setBarterPrice] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!imageFile) {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  function onPickImageFile(file: File | null) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = null;
+
+    setImageFile(file);
+    if (!file) {
       setImagePreviewUrl(null);
       return;
     }
 
-    const url = URL.createObjectURL(imageFile);
+    const url = URL.createObjectURL(file);
+    previewUrlRef.current = url;
     setImagePreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+  }
 
   useEffect(() => {
     if (authLoading) return;
 
     const userId = user?.id;
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -94,10 +123,10 @@ export default function NewItemPage() {
 
     setError(null);
 
-    if (title.trim().length < 3) return setError('Judul minimal 3 karakter.');
+    if (title.trim().length < 3) return setError('Nama item produk minimal 3 karakter.');
     if (description.trim().length < 10) return setError('Deskripsi minimal 10 karakter.');
-    if (!category.trim()) return setError('Category wajib diisi.');
-    if (!condition.trim()) return setError('Condition wajib diisi.');
+    if (!category.trim()) return setError('Kategori wajib diisi.');
+    if (!condition.trim()) return setError('Kondisi item wajib diisi.');
 
     setSaving(true);
 
@@ -178,7 +207,7 @@ export default function NewItemPage() {
         <Card className="mt-6">
           <form onSubmit={onSubmit} className="grid gap-4 p-6">
             <div>
-              <label className="block text-sm font-medium">Judul</label>
+              <label className="block text-sm font-medium">Nama Item Produk</label>
               <Input className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} required />
             </div>
 
@@ -195,30 +224,46 @@ export default function NewItemPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium">Category</label>
-                <Input
-                  className="mt-1"
+                <label className="block text-sm font-medium">Kategori</label>
+                <select
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="Mis: Elektronik"
                   required
-                />
+                >
+                  <option value="" disabled>
+                    Pilih kategori
+                  </option>
+                  {categoryOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium">Condition</label>
-                <Input
-                  className="mt-1"
+                <label className="block text-sm font-medium">Kondisi Item</label>
+                <select
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
                   value={condition}
                   onChange={(e) => setCondition(e.target.value)}
-                  placeholder="Mis: Bekas - Layak"
                   required
-                />
+                >
+                  <option value="" disabled>
+                    Pilih kondisi
+                  </option>
+                  {conditionOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium">Wanted Item (opsional)</label>
+              <label className="block text-sm font-medium">Item yang diinginkan (optional)</label>
               <Input
                 className="mt-1"
                 value={wantedItem}
@@ -228,24 +273,41 @@ export default function NewItemPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium">Barter Price (opsional)</label>
+              <label className="block text-sm font-medium">Perkiraan Harga Item</label>
               <Input
                 className="mt-1"
                 value={barterPrice}
                 onChange={(e) => setBarterPrice(e.target.value)}
-                placeholder="Mis: tambah 50rb / nego"
+                placeholder="Contoh: Rp 150.000 (perkiraan)"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium">Foto (opsional)</label>
-              <input
-                className="mt-1 block w-full text-sm text-muted-strong"
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-              />
-              <div className="mt-1 text-xs text-muted">Hanya JPG/PNG. Maks 1MB (akan dikompres otomatis).</div>
+              <div className="rounded-2xl border border-border bg-surface p-4">
+                <div className="flex items-start gap-3">
+                  <div className="select-none text-2xl leading-none">📷</div>
+                  <div className="min-w-0 flex-1">
+                    <label className="block text-sm font-medium">Upload Foto (opsional)</label>
+                    <p className="mt-1 text-xs text-muted">
+                      JPG/PNG • Maksimal 1 MB • Akan dikompres otomatis bila perlu
+                    </p>
+
+                    <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                      Pilih Foto
+                      <input
+                        className="hidden"
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+
+                    <div className="mt-2 text-xs text-muted-strong">
+                      {imageFile ? `Terpilih: ${imageFile.name}` : 'Belum ada file dipilih'}
+                    </div>
+                  </div>
+                </div>
+              </div>
               {imagePreviewUrl ? (
                 <img
                   src={imagePreviewUrl}
@@ -260,7 +322,7 @@ export default function NewItemPage() {
                 Batal
               </Button>
               <Button type="submit" variant="primary" disabled={saving}>
-                {saving ? 'Saving…' : 'Submit'}
+                {saving ? 'Menyimpan…' : 'Simpan'}
               </Button>
             </div>
           </form>

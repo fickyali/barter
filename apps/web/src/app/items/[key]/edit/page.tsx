@@ -23,6 +23,27 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
 
+  const categoryOptions = useMemo(
+    () =>
+      [
+        'Elektronik & Gadget',
+        'Fashion & Aksesoris',
+        'Hobi & Koleksi',
+        'Perabotan Rumah Tangga',
+        'Mainan Anak',
+        'Kendaraan & Otomotif',
+        'Voucher & Digital',
+        'Jasa',
+        'Lainnya',
+      ] as const,
+    []
+  );
+
+  const conditionOptions = useMemo(
+    () => ['Baru', 'Like New', 'Bekas Pakai', 'Rusak ringan', 'Seadanya'] as const,
+    []
+  );
+
   const [me, setMe] = useState<Profile | null>(null);
   const [item, setItem] = useState<Item | null>(null);
 
@@ -115,10 +136,10 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
     setError(null);
     setInfo(null);
 
-    if (title.trim().length < 3) return setError('Judul minimal 3 karakter.');
+    if (title.trim().length < 3) return setError('Nama item produk minimal 3 karakter.');
     if (description.trim().length < 10) return setError('Deskripsi minimal 10 karakter.');
-    if (!category.trim()) return setError('Category wajib diisi.');
-    if (!condition.trim()) return setError('Condition wajib diisi.');
+    if (!category.trim()) return setError('Kategori wajib diisi.');
+    if (!condition.trim()) return setError('Kondisi item wajib diisi.');
 
     if (item.user_id !== userId) {
       setError('Hanya pemilik item yang bisa edit.');
@@ -205,12 +226,12 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
       <NavBar isAdmin={isAdmin} isAuthed />
       <Container className="max-w-3xl py-6">
         <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
-          ← Back
+          ← Kembali
         </Button>
 
         <h1 className="mt-3 text-lg font-semibold tracking-tight">Edit Item</h1>
         {item?.status === 'approved' ? (
-          <p className="mt-1 text-sm text-warning">Catatan: edit item approved akan mengubah status menjadi pending.</p>
+          <p className="mt-1 text-sm text-warning">Catatan: edit item yang sudah approved akan mengubah status menjadi pending.</p>
         ) : null}
 
         {!isOwner ? (
@@ -220,7 +241,7 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
             <form onSubmit={onSubmit} className="p-6">
               <div className="grid gap-4">
               <div>
-                <label className="text-sm font-medium">Judul</label>
+                <label className="text-sm font-medium">Nama Item Produk</label>
                 <Input
                   className="mt-1"
                   value={title}
@@ -242,28 +263,46 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium">Category</label>
-                  <Input
-                    className="mt-1"
+                  <label className="text-sm font-medium">Kategori</label>
+                  <select
+                    className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                     required
-                  />
+                  >
+                    <option value="" disabled>
+                      Pilih kategori
+                    </option>
+                    {categoryOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">Condition</label>
-                  <Input
-                    className="mt-1"
+                  <label className="text-sm font-medium">Kondisi Item</label>
+                  <select
+                    className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
                     value={condition}
                     onChange={(e) => setCondition(e.target.value)}
                     required
-                  />
+                  >
+                    <option value="" disabled>
+                      Pilih kondisi
+                    </option>
+                    {conditionOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium">Wanted Item (opsional)</label>
+                <label className="text-sm font-medium">Item yang diinginkan (optional)</label>
                 <Input
                   className="mt-1"
                   value={wantedItem}
@@ -272,7 +311,7 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Barter Price (opsional)</label>
+                <label className="text-sm font-medium">Perkiraan Harga Item</label>
                 <Input
                   className="mt-1"
                   value={barterPrice}
@@ -281,15 +320,31 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Ganti Foto (opsional)</label>
-                <input
-                  className="mt-1 block w-full text-sm text-muted-strong"
-                  type="file"
-                  accept="image/jpeg,image/png"
-                  onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-                />
-                <div className="mt-1 text-xs text-muted">
-                  Hanya JPG/PNG. Maks 1MB (akan dikompres otomatis). Kalau tidak upload, foto lama tetap dipakai.
+                <div className="rounded-2xl border border-border bg-surface p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="select-none text-2xl leading-none">🖼️</div>
+                    <div className="min-w-0 flex-1">
+                      <label className="block text-sm font-medium">Upload Foto</label>
+                      <p className="mt-1 text-xs text-muted">
+                        JPG/PNG • Maksimal 1 MB • Akan dikompres otomatis bila perlu
+                      </p>
+                      <p className="mt-1 text-xs text-muted">Kalau tidak upload, foto lama tetap dipakai.</p>
+
+                      <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                        Pilih Foto
+                        <input
+                          className="hidden"
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+
+                      <div className="mt-2 text-xs text-muted-strong">
+                        {imageFile ? `Terpilih: ${imageFile.name}` : 'Belum ada file dipilih'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -305,7 +360,7 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
                   Batal
                 </Button>
                 <Button type="submit" variant="primary" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
+                  {saving ? 'Menyimpan…' : 'Simpan'}
                 </Button>
               </div>
             </div>
