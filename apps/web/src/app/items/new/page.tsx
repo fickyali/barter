@@ -29,6 +29,8 @@ export default function NewItemPage() {
 }
 
 function NewItemPageInner() {
+    // Deteksi mobile/tablet untuk show/hide tombol kamera
+    const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
 
@@ -353,16 +355,18 @@ function NewItemPageInner() {
                           onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
                         />
                       </label>
-                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
-                        Buka Kamera
-                        <input
-                          className="hidden"
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
+                      {isMobile && (
+                        <label className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
+                          Buka Kamera
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                      )}
                     </div>
 
                     <div className="mt-2 text-xs text-muted-strong">
