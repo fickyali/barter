@@ -102,12 +102,22 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
 
-    setImageFile(file);
     if (!file) {
+      setImageFile(null);
       setImagePreviewUrl(null);
       return;
     }
 
+    // Extra validation for camera capture
+    if (!file.type.startsWith('image/') || file.size === 0) {
+      setImageFile(null);
+      setImagePreviewUrl(null);
+      setError('Foto dari kamera gagal dibaca. Silakan coba lagi atau gunakan Pilih Foto.');
+      console.error('Invalid camera file:', file);
+      return;
+    }
+
+    setImageFile(file);
     const url = URL.createObjectURL(file);
     previewUrlRef.current = url;
     setImagePreviewUrl(url);
