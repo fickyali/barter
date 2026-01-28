@@ -5,12 +5,10 @@ export function slugify(input: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
-  const slug = normalized
-    // Drop digits from the base slug (numbers will be used only for collision suffixes like -2, -3).
-    .replace(/[^a-z]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80);
+  // Keep at most 5 tokens ("kata") to keep URLs and filenames readable.
+  // Tokens include letters and digits so titles like "HP 15 Pro Max" become "hp-15-pro-max".
+  const tokens = normalized.match(/[a-z0-9]+/g) ?? [];
+  const slug = tokens.slice(0, 5).join('-').slice(0, 80);
 
   return slug || 'item';
 }

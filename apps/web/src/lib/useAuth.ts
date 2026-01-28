@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 
-import { supabase } from '@/lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isSupabaseConfigured);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
     let isMounted = true;
 
     supabase.auth

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/Badge';
+import { formatIdrFromUnknown } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
 import type { Item } from '@/lib/types';
 
@@ -16,17 +17,18 @@ export function ItemCard({
   showStatus?: boolean;
   viewerIsAdmin?: boolean;
 }) {
-  const shouldShowStatus = showStatus && (item.status !== 'approved' || viewerIsAdmin);
+  // Only show status badge if explicitly requested (e.g. admin page)
+  const shouldShowStatus = showStatus && viewerIsAdmin;
   const badgeVariant =
     item.status === 'approved' ? 'success' : item.status === 'pending' ? 'warning' : 'danger';
 
   return (
     <Link
       href={itemHref(item)}
-      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface2"
+      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface2 h-full"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-4">
+      <div className="flex flex-col h-full">
+        <div className="flex items-start gap-4">
           {item.image_url ? (
             <div className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface2">
               <Image
@@ -43,10 +45,10 @@ export function ItemCard({
             </div>
           )}
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">{item.title}</div>
             <div className="mt-1 text-xs text-muted">
-              {item.category} • {item.condition}
+              {item.category}  {item.condition}
             </div>
             {item.wanted_item ? (
               <div className="mt-2 text-xs text-muted-strong">
@@ -55,14 +57,14 @@ export function ItemCard({
             ) : null}
             {item.barter_price ? (
               <div className="mt-1 text-xs text-muted-strong">
-                <span className="font-medium">Tambah:</span> {item.barter_price}
+                <span className="font-medium">Perkiraan Harga Item:</span>{' '}
+                {formatIdrFromUnknown(item.barter_price)}
               </div>
             ) : null}
           </div>
         </div>
-
         {shouldShowStatus ? (
-          <div className="shrink-0">
+          <div className="mt-2 self-end">
             <Badge variant={badgeVariant}>{item.status}</Badge>
           </div>
         ) : null}

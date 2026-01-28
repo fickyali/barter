@@ -8,9 +8,18 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
-import { supabase } from '@/lib/supabaseClient';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 export default function RegisterPage() {
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Register tidak tersedia (Supabase belum diset)" showHomeLink />;
+  }
+
+  return <RegisterPageInner />;
+}
+
+function RegisterPageInner() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

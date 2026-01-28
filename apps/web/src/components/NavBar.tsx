@@ -30,16 +30,17 @@ export function NavBar({ isAdmin, isAuthed }: { isAdmin?: boolean; isAuthed?: bo
   const [open, setOpen] = useState(false);
 
   const links = useMemo(() => {
-    const base = [{ href: '/', label: 'Home' }];
+    const base = [{ href: '/', label: 'Beranda' }];
 
     if (!isAuthed) {
       return [...base, { href: '/login', label: 'Login' }, { href: '/register', label: 'Register' }];
     }
 
+    // Hide 'Tambah Item' from menu bar
     return [
       ...base,
-      { href: '/items/new', label: 'Tambah Item' },
-      { href: '/profile', label: 'Profile' },
+      // { href: '/items/new', label: 'Tambah Item' }, // Hidden from menu
+      { href: '/profile', label: 'Akun Saya' },
       ...(isAdmin ? [{ href: '/admin', label: 'Admin' }] : []),
     ];
   }, [isAdmin, isAuthed]);
@@ -53,7 +54,7 @@ export function NavBar({ isAdmin, isAuthed }: { isAdmin?: boolean; isAuthed?: bo
     <div className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
         <Link href="/" className="text-sm font-semibold tracking-tight">
-          Barter
+          Barter.biz.id
         </Link>
 
         <div className="hidden items-center gap-1 sm:flex">

@@ -17,7 +17,8 @@ export type Item = {
   category: string;
   condition: string;
   wanted_item: string | null;
-  barter_price: string | null;
+  // If DB column is bigint (int8), PostgREST may return it as string.
+  barter_price: number | string | null;
   image_url: string | null;
   status: ItemStatus;
   created_at: string;

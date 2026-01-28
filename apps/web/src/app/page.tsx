@@ -9,13 +9,42 @@ import { NavBar } from '@/components/NavBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
-import { supabase } from '@/lib/supabaseClient';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useAuth } from '@/lib/useAuth';
 
 const PAGE_SIZE = 12;
 
 export default function HomePage() {
+    // Search/filter state
+    const [search, setSearch] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [filterCategory, setFilterCategory] = useState('');
+    const [filterCondition, setFilterCondition] = useState('');
+    const [filterPriceMin, setFilterPriceMin] = useState('');
+    const [filterPriceMax, setFilterPriceMax] = useState('');
+
+    // Option lists (should match item form)
+    const categoryOptions = [
+      'Elektronik & Gadget',
+      'Fashion & Aksesoris',
+      'Hobi & Koleksi',
+      'Perabotan Rumah Tangga',
+      'Mainan Anak',
+      'Kendaraan & Otomotif',
+      'Voucher & Digital',
+      'Jasa',
+      'Lainnya',
+    ];
+    const conditionOptions = [
+      'Baru',
+      'Like New',
+      'Terawat',
+      'Masih Layak Pakai',
+      'Perlu Sedikit Perbaikan',
+      'Seadanya',
+    ];
   const { user, loading: authLoading } = useAuth();
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -26,6 +55,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
     if (authLoading) return;
 
     let cancelled = false;
@@ -79,26 +109,139 @@ export default function HomePage() {
 
   if (authLoading) return <Loading />;
 
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Supabase belum diset (Preview)" />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <NavBar isAdmin={profile?.is_admin} isAuthed={Boolean(user)} />
-      <Container className="py-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Listing Barter</h1>
-            <p className="mt-1 text-sm text-muted">Hanya item berstatus approved yang tampil untuk semua user.</p>
-          </div>
 
-          {user ? (
-            <Link href="/items/new">
-              <Button variant="primary" size="sm">+ Tambah Item</Button>
-            </Link>
-          ) : (
-            <Link href="/login">
-              <Button variant="secondary" size="sm">Login untuk pasang item</Button>
-            </Link>
-          )}
+      {/* Hero Section */}
+      <section className="w-full bg-transparent py-10 sm:py-16">
+        <Container>
+          <div className="max-w-2xl mx-auto text-center">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-3 leading-tight">
+              Yang Biasa Buatmu, Bisa Jadi Berharga Buat Orang Lain
+            </h1>
+            <p className="text-base sm:text-lg text-muted mb-6 font-medium capitalize">
+              Setiap Barang Punya Nilai, Meski Tak Selalu Punya Harga.
+            </p>
+            <button
+              className="inline-block rounded-xl bg-primary px-6 py-3 text-white font-semibold shadow hover:bg-primary/90 transition"
+              onClick={() => {
+                const el = document.getElementById('listing-barter-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Barter Sekarang
+            </button>
+          </div>
+        </Container>
+      </section>
+
+      <Container className="py-6" id="listing-barter-section">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          {/* Mobile: Heading + + button in one row; Desktop: all in one row */}
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Listing Barter</h1>
+              <p className="mt-1 text-sm text-muted">Hanya item berstatus approved yang tampil untuk semua user.</p>
+            </div>
+            {user ? (
+              <>
+                <span className="flex sm:hidden ml-2">
+                  <Link href="/items/new">
+                    <Button
+                      variant="primary"
+                      size="icon"
+                      className="rounded-full w-10 h-10 p-0 justify-center items-center text-xl"
+                      aria-label="Tambah Item"
+                    >
+                      +
+                    </Button>
+                  </Link>
+                </span>
+                <span className="hidden sm:inline-flex ml-4">
+                  <Link href="/items/new">
+                    <Button variant="primary" size="sm">
+                      + Tambah Item
+                    </Button>
+                  </Link>
+                </span>
+              </>
+            ) : (
+              <Link href="/login">
+                <Button variant="secondary" size="sm">Login untuk pasang item</Button>
+              </Link>
+            )}
+          </div>
         </div>
+
+        {/* Search & Advanced Filter */}
+        <form
+          className="mt-6 flex flex-col gap-2"
+          onSubmit={e => { e.preventDefault(); setPage(0); }}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 w-full">
+            <input
+              type="text"
+              className="w-full sm:w-64 rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
+              placeholder="Cari nama/kata kunci..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <button
+              type="button"
+              className="text-xs text-primary underline ml-1 mt-2 sm:mt-0"
+              onClick={() => setShowAdvanced(v => !v)}
+            >
+              {showAdvanced ? 'Tutup Filter Lanjutan' : 'Filter Lanjutan'}
+            </button>
+          </div>
+          {showAdvanced && (
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full">
+              <select
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+              >
+                <option value="">Kategori</option>
+                {categoryOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <select
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
+                value={filterCondition}
+                onChange={e => setFilterCondition(e.target.value)}
+              >
+                <option value="">Kondisi</option>
+                {conditionOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <div className="flex gap-2 min-w-[240px]">
+                <input
+                  type="number"
+                  min="0"
+                  className="w-32 rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
+                  placeholder="Harga Min"
+                  value={filterPriceMin}
+                  onChange={e => setFilterPriceMin(e.target.value)}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  className="w-32 rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/15"
+                  placeholder="Harga Max"
+                  value={filterPriceMax}
+                  onChange={e => setFilterPriceMax(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+        </form>
 
         {error ? (
           <Card className="mt-6 border-danger/20 bg-danger/5 p-4 text-sm text-danger">{error}</Card>
@@ -107,25 +250,50 @@ export default function HomePage() {
         {loading ? (
           <Loading label="Loading items…" />
         ) : (
-          <div className="mt-6 grid gap-3">
-            {items.length === 0 ? (
-              <Card className="p-6 text-sm text-muted">Belum ada item approved.</Card>
-            ) : (
-              items.map((item) => (
-                <ItemCard key={item.id} item={item} viewerIsAdmin={Boolean(profile?.is_admin)} />
-              ))
-            )}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {(() => {
+              // Filtering logic
+              let filtered = items;
+              if (search.trim()) {
+                const q = search.trim().toLowerCase();
+                filtered = filtered.filter(item =>
+                  item.title?.toLowerCase().includes(q) ||
+                  item.description?.toLowerCase().includes(q) ||
+                  item.category?.toLowerCase().includes(q) ||
+                  item.condition?.toLowerCase().includes(q) ||
+                  item.wanted_item?.toLowerCase().includes(q)
+                );
+              }
+              if (showAdvanced) {
+                if (filterCategory) filtered = filtered.filter(item => item.category === filterCategory);
+                if (filterCondition) filtered = filtered.filter(item => item.condition === filterCondition);
+                if (filterPriceMin) filtered = filtered.filter(item => {
+                  const n = Number(item.barter_price);
+                  return !isNaN(n) && n >= Number(filterPriceMin);
+                });
+                if (filterPriceMax) filtered = filtered.filter(item => {
+                  const n = Number(item.barter_price);
+                  return !isNaN(n) && n <= Number(filterPriceMax);
+                });
+              }
+              if (filtered.length === 0) {
+                return <Card className="p-6 text-sm text-muted">Tidak ada item yang cocok.</Card>;
+              }
+              return filtered.map((item) => (
+                <ItemCard key={item.id} item={item} showStatus={false} />
+              ));
+            })()}
           </div>
         )}
 
         {!loading ? (
           <div className="mt-6 flex items-center justify-between">
             <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-              ← Prev
+               Sebelumnya
             </Button>
-            <div className="text-sm text-muted">Page {page + 1}</div>
+            <div className="text-sm text-muted">Halaman {page + 1}</div>
             <Button variant="secondary" size="sm" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
-              Next →
+              Berikutnya 
             </Button>
           </div>
         ) : null}

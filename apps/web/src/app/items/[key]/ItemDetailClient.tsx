@@ -10,9 +10,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { formatIdrFromUnknown } from '@/lib/currency';
 import { itemEditHref } from '@/lib/itemLink';
 import { isSlug } from '@/lib/slug';
-import { supabase } from '@/lib/supabaseClient';
+import { extractPublicBucketObjectPath } from '@/lib/storage';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useAuth } from '@/lib/useAuth';
 import { isUuid } from '@/lib/uuid';
@@ -51,6 +54,7 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
   }, [owner?.whatsapp]);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
     if (authLoading) return;
     if (!keyIsValid) return;
 
@@ -130,6 +134,19 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
     setDeleting(true);
     setError(null);
 
+    // Best-effort: delete image in Storage first (if it is a public URL from our bucket).
+    if (item.image_url) {
+      const objectPath = extractPublicBucketObjectPath(item.image_url, 'item-images');
+      if (objectPath) {
+        const { error: removeError } = await supabase.storage.from('item-images').remove([objectPath]);
+        if (removeError) {
+          setDeleting(false);
+          setError(`Gagal menghapus foto di Storage: ${removeError.message}`);
+          return;
+        }
+      }
+    }
+
     const { error: deleteError } = await supabase.from('items').delete().eq('id', item.id);
 
     setDeleting(false);
@@ -140,6 +157,10 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
     }
 
     router.replace('/');
+  }
+
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Detail item tidak tersedia (Supabase belum diset)" />;
   }
 
   if (authLoading || loading) return <Loading />;
@@ -160,7 +181,7 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
       <NavBar isAdmin={isAdmin} isAuthed={Boolean(user)} />
       <Container className="max-w-3xl py-6">
         <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
-          ← Back
+          ← Kembali
         </Button>
 
         {error ? (
@@ -206,12 +227,13 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
             <div className="mt-4 grid gap-2 text-sm">
               {item.wanted_item ? (
                 <div>
-                  <span className="font-medium">Wanted:</span> {item.wanted_item}
+                  <span className="font-medium">Ingin:</span> {item.wanted_item}
                 </div>
               ) : null}
               {item.barter_price ? (
                 <div>
-                  <span className="font-medium">Barter price:</span> {item.barter_price}
+                  <span className="font-medium">Perkiraan Harga Item:</span>{' '}
+                  {formatIdrFromUnknown(item.barter_price)}
                 </div>
               ) : null}
             </div>
@@ -241,7 +263,7 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
 
                 {canDelete ? (
                   <Button type="button" variant="secondary" onClick={onDelete} disabled={deleting}>
-                    {deleting ? 'Deleting…' : 'Delete'}
+                    {deleting ? 'Menghapus…' : 'Hapus'}
                   </Button>
                 ) : null}
               </div>

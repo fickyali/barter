@@ -9,11 +9,20 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
-import { supabase } from '@/lib/supabaseClient';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, ItemStatus, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function AdminPage() {
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Admin tidak tersedia (Supabase belum diset)" />;
+  }
+
+  return <AdminPageInner />;
+}
+
+function AdminPageInner() {
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
   const [profile, setProfile] = useState<Profile | null>(null);

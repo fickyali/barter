@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Loading } from '@/components/Loading';
@@ -10,15 +11,26 @@ import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
+import { formatIdr, formatIdrFromUnknown, parseIdrToNumber } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
 import { isSlug } from '@/lib/slug';
-import { supabase } from '@/lib/supabaseClient';
+import { extractPublicBucketObjectPath } from '@/lib/storage';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { isUuid } from '@/lib/uuid';
 
 export default function EditItemPage({ params }: { params: { key: string } }) {
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Edit Item tidak tersedia (Supabase belum diset)" />;
+  }
+
+  return <EditItemPageInner params={params} />;
+}
+
+function EditItemPageInner({ params }: { params: { key: string } }) {
   const { key } = use(params as unknown as Promise<{ key: string }>);
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
@@ -40,7 +52,14 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
   );
 
   const conditionOptions = useMemo(
-    () => ['Baru', 'Like New', 'Bekas Pakai', 'Rusak ringan', 'Seadanya'] as const,
+    () => [
+      'Baru',
+      'Like New',
+      'Terawat',
+      'Masih Layak Pakai',
+      'Perlu Sedikit Perbaikan',
+      'Seadanya',
+    ] as const,
     []
   );
 
@@ -54,6 +73,9 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
   const [wantedItem, setWantedItem] = useState('');
   const [barterPrice, setBarterPrice] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  const previewUrlRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,6 +89,27 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
     if (!userId || !item) return false;
     return item.user_id === userId;
   }, [item, user]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  function onPickImageFile(file: File | null) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = null;
+
+    setImageFile(file);
+    if (!file) {
+      setImagePreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    previewUrlRef.current = url;
+    setImagePreviewUrl(url);
+  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -114,7 +157,9 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
       setCategory(loadedItem.category);
       setCondition(loadedItem.condition);
       setWantedItem(loadedItem.wanted_item ?? '');
-      setBarterPrice(loadedItem.barter_price ?? '');
+      setBarterPrice(formatIdrFromUnknown(loadedItem.barter_price) ?? '');
+      onPickImageFile(null);
+      setRemoveExistingImage(false);
 
       setLoading(false);
     }
@@ -141,6 +186,10 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
     if (!category.trim()) return setError('Kategori wajib diisi.');
     if (!condition.trim()) return setError('Kondisi item wajib diisi.');
 
+    const priceNumber = barterPrice.trim() ? parseIdrToNumber(barterPrice) : null;
+    if (barterPrice.trim() && priceNumber === null)
+      return setError('Perkiraan Harga Item tidak valid. Masukkan angka, mis. Rp 10.000.');
+
     if (item.user_id !== userId) {
       setError('Hanya pemilik item yang bisa edit.');
       return;
@@ -149,6 +198,18 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
     setSaving(true);
 
     let imageUrl: string | null = item.image_url;
+    const oldImageUrl = item.image_url;
+    const oldObjectPath = oldImageUrl
+      ? extractPublicBucketObjectPath(oldImageUrl, 'item-images')
+      : null;
+    let newObjectPath: string | null = null;
+    let newFolder: string | null = null;
+    let baseNameForCleanup: string | null = null;
+
+    if (removeExistingImage && !imageFile) {
+      // User wants to remove the old image and did not upload a new one
+      imageUrl = null;
+    }
 
     if (imageFile) {
       let processed: File;
@@ -161,10 +222,16 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
       }
 
       const ext = extensionForMime(processed.type);
-      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const safeBase = ((item.slug ?? '').trim() || 'item').slice(0, 80);
+      const year = new Date().getFullYear();
+      const folder = `image/${year}`;
+      const path = `${folder}/${safeBase}.${ext}`;
+      newObjectPath = path;
+      newFolder = folder;
+      baseNameForCleanup = safeBase;
 
       const { error: uploadError } = await supabase.storage.from('item-images').upload(path, processed, {
-        upsert: false,
+        upsert: true,
         contentType: processed.type || undefined,
       });
 
@@ -180,25 +247,100 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
 
     const nextStatus = item.status === 'approved' ? 'pending' : item.status;
 
-    const { error: updateError } = await supabase
-      .from('items')
-      .update({
-        title: title.trim(),
-        description: description.trim(),
-        category: category.trim(),
-        condition: condition.trim(),
-        wanted_item: wantedItem.trim() || null,
-        barter_price: barterPrice.trim() || null,
-        image_url: imageUrl,
-        status: nextStatus,
-      })
-      .eq('id', item.id);
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      category: category.trim(),
+      condition: condition.trim(),
+      wanted_item: wantedItem.trim() || null,
+      // IMPORTANT: store as number for Postgres bigint, format only for UI.
+      barter_price: priceNumber,
+      image_url: imageUrl,
+      status: nextStatus,
+    };
+
+    const updateRes = await supabase.from('items').update(payload).eq('id', item.id);
+    const updateError = updateRes.error;
 
     setSaving(false);
 
     if (updateError) {
       setError(updateError.message);
       return;
+    }
+
+    // If user uploaded a new image, clean up older files that share the same slug base.
+    // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
+    if (imageFile || (removeExistingImage && oldObjectPath)) {
+      const foldersToCheck = new Set<string>();
+
+      if (newFolder) foldersToCheck.add(newFolder);
+      if (oldObjectPath) {
+        const oldFolder = oldObjectPath.split('/').slice(0, -1).join('/');
+        if (oldFolder) foldersToCheck.add(oldFolder);
+      }
+
+      const removePaths = new Set<string>();
+
+      // Always try common extension variants (Supabase Storage won't automatically remove the old ext).
+      // This fixes cases like first upload: dompet-lama.jpg, then replace: dompet-lama.png.
+      const possibleExts = ['jpg', 'jpeg', 'png'];
+      if (baseNameForCleanup) {
+        for (const folder of foldersToCheck) {
+          for (const ext of possibleExts) {
+            const candidate = `${folder}/${baseNameForCleanup}.${ext}`;
+            if (newObjectPath && candidate === newObjectPath) continue;
+            removePaths.add(candidate);
+          }
+        }
+      }
+
+      // Always prefer deleting the exact old object path if it's different.
+      if (oldObjectPath && (imageFile ? oldObjectPath !== newObjectPath : true)) {
+        removePaths.add(oldObjectPath);
+      }
+
+      // Also best-effort: list and delete any sibling objects in the same folder that start with the same base name.
+      // This handles unexpected extensions or older naming conventions.
+      if (baseNameForCleanup) {
+        for (const folder of foldersToCheck) {
+          const { data: objects, error: listError } = await supabase.storage
+            .from('item-images')
+            .list(folder, { limit: 200 });
+
+          if (listError) {
+            console.error('Failed to list Storage folder for cleanup:', listError);
+            setError(
+              `Item berhasil disimpan, tapi gagal memeriksa foto lama di Storage: ${listError.message}. ` +
+                'Pastikan policy Storage bucket item-images mengizinkan select/list.'
+            );
+            return;
+          }
+
+          for (const obj of objects ?? []) {
+            if (!obj?.name) continue;
+            if (!obj.name.startsWith(`${baseNameForCleanup}.`)) continue;
+            const fullPath = `${folder}/${obj.name}`;
+            if (newObjectPath && fullPath === newObjectPath) continue;
+            removePaths.add(fullPath);
+          }
+        }
+      }
+
+      if (removePaths.size > 0) {
+        const { error: removeError } = await supabase.storage
+          .from('item-images')
+          .remove(Array.from(removePaths));
+
+        if (removeError) {
+          console.error('Failed to remove old image(s) from Storage:', removeError);
+          setError(
+            `Item berhasil disimpan, tapi gagal menghapus foto lama di Storage: ${removeError.message}. ` +
+              'Pastikan policy Storage bucket item-images mengizinkan delete untuk owner.'
+          );
+          return;
+        }
+      }
     }
 
     if (item.status === 'approved') {
@@ -316,7 +458,24 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
                   className="mt-1"
                   value={barterPrice}
                   onChange={(e) => setBarterPrice(e.target.value)}
+                  onBlur={() => {
+                    const n = parseIdrToNumber(barterPrice);
+                    if (n === null) {
+                      if (!barterPrice.trim()) return;
+                      return;
+                    }
+                    setBarterPrice(formatIdr(n));
+                  }}
+                  inputMode="numeric"
+                  placeholder="Rp 10.000"
                 />
+                <div className="mt-1 text-xs text-muted">
+                  {(() => {
+                    const n = parseIdrToNumber(barterPrice);
+                    if (n === null) return 'Masukkan angka (boleh tanpa titik), nanti diformat otomatis.';
+                    return `Akan tampil sebagai: ${formatIdr(n)}`;
+                  })()}
+                </div>
               </div>
 
               <div>
@@ -331,14 +490,24 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
                       <p className="mt-1 text-xs text-muted">Kalau tidak upload, foto lama tetap dipakai.</p>
 
                       <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80">
-                        Pilih Foto
+                        {imageFile ? 'Ganti Foto' : 'Pilih Foto'}
                         <input
                           className="hidden"
                           type="file"
                           accept="image/jpeg,image/png"
-                          onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+                          onChange={(e) => onPickImageFile(e.target.files?.[0] ?? null)}
                         />
                       </label>
+
+                      {imageFile ? (
+                        <button
+                          type="button"
+                          className="ml-2 inline-flex items-center rounded-xl border border-border bg-surface2 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-surface2/80"
+                          onClick={() => onPickImageFile(null)}
+                        >
+                          Batalkan
+                        </button>
+                      ) : null}
 
                       <div className="mt-2 text-xs text-muted-strong">
                         {imageFile ? `Terpilih: ${imageFile.name}` : 'Belum ada file dipilih'}
@@ -346,6 +515,42 @@ export default function EditItemPage({ params }: { params: { key: string } }) {
                     </div>
                   </div>
                 </div>
+
+                {imagePreviewUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Preview foto baru"
+                      className="mt-3 h-40 w-40 rounded-xl border border-border object-cover shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      className="absolute top-0 right-0 m-1 rounded-full bg-danger text-white w-7 h-7 flex items-center justify-center shadow"
+                      title="Batalkan foto baru"
+                      onClick={() => onPickImageFile(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (!removeExistingImage && item?.image_url) ? (
+                  <div className="relative mt-3 inline-block overflow-hidden rounded-xl border border-border bg-surface2">
+                    <Image
+                      src={item.image_url}
+                      alt="Foto saat ini"
+                      width={320}
+                      height={320}
+                      className="h-40 w-40 object-cover"
+                    />
+                    <button
+                      type="button"
+                      className="absolute top-0 right-0 m-1 rounded-full bg-danger text-white w-7 h-7 flex items-center justify-center shadow"
+                      title="Hapus gambar ini"
+                      onClick={() => { setRemoveExistingImage(true); setImagePreviewUrl(null); setImageFile(null); }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {error ? (

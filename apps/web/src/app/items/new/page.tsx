@@ -11,13 +11,24 @@ import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
+import { formatIdr, parseIdrToNumber } from '@/lib/currency';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
+import { itemHref } from '@/lib/itemLink';
 import { slugify } from '@/lib/slug';
-import { supabase } from '@/lib/supabaseClient';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function NewItemPage() {
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Tambah Item tidak tersedia (Supabase belum diset)" />;
+  }
+
+  return <NewItemPageInner />;
+}
+
+function NewItemPageInner() {
   const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
 
@@ -38,7 +49,14 @@ export default function NewItemPage() {
   );
 
   const conditionOptions = useMemo(
-    () => ['Baru', 'Like New', 'Bekas Pakai', 'Rusak ringan', 'Seadanya'] as const,
+    () => [
+      'Baru',
+      'Like New',
+      'Terawat',
+      'Masih Layak Pakai',
+      'Perlu Sedikit Perbaikan',
+      'Seadanya',
+    ] as const,
     []
   );
 
@@ -90,7 +108,12 @@ export default function NewItemPage() {
 
     async function loadProfile() {
       setLoading(true);
-      const { data } = await supabase.from('profiles').select('id,email,name,whatsapp,is_admin').eq('id', userId).single();
+      const { data } = await supabase
+        .from('profiles')
+        .select('id,email,name,whatsapp,is_admin')
+        .eq('id', userId)
+        .single();
+
       if (cancelled) return;
       setProfile((data as Profile) ?? null);
       setLoading(false);
@@ -106,7 +129,7 @@ export default function NewItemPage() {
     const normalized = (base || 'item').replace(/-+/g, '-');
     let candidate = normalized;
 
-    for (let suffix = 2; suffix < 50; suffix++) {
+    for (let suffix = 2; suffix < 5000; suffix++) {
       const { data } = await supabase.from('items').select('id').eq('slug', candidate).limit(1).maybeSingle();
       if (!data) return candidate;
       candidate = `${normalized}-${suffix}`;
@@ -128,6 +151,9 @@ export default function NewItemPage() {
     if (!category.trim()) return setError('Kategori wajib diisi.');
     if (!condition.trim()) return setError('Kondisi item wajib diisi.');
 
+    const priceNumber = barterPrice.trim() ? parseIdrToNumber(barterPrice) : null;
+    if (barterPrice.trim() && priceNumber === null) return setError('Perkiraan Harga Item tidak valid. Masukkan angka, mis. Rp 10.000.');
+
     setSaving(true);
 
     let imageUrl: string | null = null;
@@ -146,7 +172,9 @@ export default function NewItemPage() {
       }
 
       const ext = extensionForMime(processed.type);
-      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const safeBase = (slug || 'item').slice(0, 80);
+      const year = new Date().getFullYear();
+      const path = `image/${year}/${safeBase}.${ext}`;
 
       const { error: uploadError } = await supabase.storage.from('item-images').upload(path, processed, {
         upsert: false,
@@ -163,7 +191,7 @@ export default function NewItemPage() {
       imageUrl = publicUrl.publicUrl;
     }
 
-    const { error: insertError } = await supabase.from('items').insert({
+    const payload = {
       user_id: userId,
       slug,
       title: title.trim(),
@@ -171,10 +199,14 @@ export default function NewItemPage() {
       category: category.trim(),
       condition: condition.trim(),
       wanted_item: wantedItem.trim() || null,
-      barter_price: barterPrice.trim() || null,
+      // IMPORTANT: store as number for Postgres bigint, format only for UI.
+      barter_price: priceNumber,
       image_url: imageUrl,
       status: 'pending',
-    });
+    };
+
+    const insertRes = await supabase.from('items').insert(payload).select('id,slug').single();
+    const insertError = insertRes.error;
 
     setSaving(false);
 
@@ -188,7 +220,9 @@ export default function NewItemPage() {
       return;
     }
 
-    router.replace('/');
+    // Redirect to newly created item (will be pending).
+    // Use slug to avoid relying on RETURNING when RLS/permissions are strict.
+    router.replace(itemHref({ id: slug, slug }));
   }
 
   if (authLoading || loading) return <Loading />;
@@ -278,8 +312,24 @@ export default function NewItemPage() {
                 className="mt-1"
                 value={barterPrice}
                 onChange={(e) => setBarterPrice(e.target.value)}
-                placeholder="Contoh: Rp 150.000 (perkiraan)"
+                onBlur={() => {
+                  const n = parseIdrToNumber(barterPrice);
+                  if (n === null) {
+                    if (!barterPrice.trim()) return;
+                    return;
+                  }
+                  setBarterPrice(formatIdr(n));
+                }}
+                inputMode="numeric"
+                placeholder="Rp 10.000"
               />
+              <div className="mt-1 text-xs text-muted">
+                {(() => {
+                  const n = parseIdrToNumber(barterPrice);
+                  if (n === null) return 'Masukkan angka (boleh tanpa titik), nanti diformat otomatis.';
+                  return `Akan tampil sebagai: ${formatIdr(n)}`;
+                })()}
+              </div>
             </div>
 
             <div>

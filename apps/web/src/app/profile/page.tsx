@@ -10,12 +10,21 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
-import { supabase } from '@/lib/supabaseClient';
+import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { isWhatsappValid, normalizeWhatsapp } from '@/lib/whatsapp';
 
 export default function ProfilePage() {
+  if (!isSupabaseConfigured) {
+    return <SupabaseNotConfigured title="Profile tidak tersedia (Supabase belum diset)" />;
+  }
+
+  return <ProfilePageInner />;
+}
+
+function ProfilePageInner() {
   const { user, loading: authLoading } = useRequireAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState('');
