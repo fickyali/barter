@@ -9,16 +9,10 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, ItemStatus, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function AdminPage() {
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Admin tidak tersedia (Supabase belum diset)" />;
-  }
-
   return <AdminPageInner />;
 }
 
@@ -42,21 +36,18 @@ function AdminPageInner() {
     let cancelled = false;
 
     async function loadProfile() {
-      const { data, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id,email,name,whatsapp,is_admin')
-        .eq('id', userId)
-        .single();
+      const profileRes = await fetch('/api/profile');
+      const profileData = await profileRes.json();
 
       if (cancelled) return;
 
-      if (fetchError) {
-        setError(fetchError.message);
+      if (!profileRes.ok) {
+        setError(profileData.error ?? 'Gagal memuat profile');
         setLoading(false);
         return;
       }
 
-      setProfile(data as Profile);
+      setProfile(profileData.profile as Profile);
       setProfileLoaded(true);
     }
 
@@ -76,20 +67,16 @@ function AdminPageInner() {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
-      .from('items')
-      .select('*')
-      .eq('status', status)
-      .order('created_at', { ascending: false })
-      .limit(100);
+    const itemsRes = await fetch(`/api/admin/items?status=${encodeURIComponent(status)}`);
+    const itemsData = await itemsRes.json();
 
-    if (fetchError) {
-      setError(fetchError.message);
+    if (!itemsRes.ok) {
+      setError(itemsData.error ?? 'Gagal memuat item');
       setLoading(false);
       return;
     }
 
-    setItems((data as Item[]) ?? []);
+    setItems((itemsData.items as Item[]) ?? []);
     setLoading(false);
   }, []);
 
@@ -103,14 +90,16 @@ function AdminPageInner() {
     const prev = items;
     setItems((cur) => cur.filter((i) => i.id !== itemId));
 
-    const { error: updateError } = await supabase
-      .from('items')
-      .update({ status })
-      .eq('id', itemId);
+    const updateRes = await fetch(`/api/admin/items/${encodeURIComponent(itemId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    const updateData = await updateRes.json();
 
-    if (updateError) {
+    if (!updateRes.ok) {
       setItems(prev);
-      setError(updateError.message);
+      setError(updateData.error ?? 'Gagal update status');
       return;
     }
   }

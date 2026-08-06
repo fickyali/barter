@@ -8,18 +8,8 @@ import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Login tidak tersedia (Supabase belum diset)" showHomeLink />;
-  }
-
-  return <LoginPageInner />;
-}
-
-function LoginPageInner() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,9 +18,9 @@ function LoginPageInner() {
 
   useEffect(() => {
     let isMounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    fetch('/api/auth/me').then((res) => res.json()).then((data) => {
       if (!isMounted) return;
-      if (data.session) router.replace('/');
+      if (data.user) router.replace('/');
     });
     return () => {
       isMounted = false;
@@ -42,15 +32,17 @@ function LoginPageInner() {
     setError(null);
     setLoading(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
     });
+    const data = await res.json();
 
     setLoading(false);
 
-    if (signInError) {
-      setError(signInError.message);
+    if (!res.ok) {
+      setError(data.error ?? 'Login gagal');
       return;
     }
 
@@ -107,7 +99,7 @@ function LoginPageInner() {
           </Card>
 
           <p className="mt-6 text-xs text-muted">
-            Catatan: Profile otomatis dibuat saat signup (via trigger Supabase).
+            Catatan: Profile otomatis dibuat saat signup.
           </p>
         </div>
       </Container>

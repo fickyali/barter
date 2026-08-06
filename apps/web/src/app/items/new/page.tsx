@@ -1,7 +1,7 @@
 'use client';
 
-import type { PostgrestError } from '@supabase/supabase-js';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 import { Loading } from '@/components/Loading';
@@ -15,16 +15,10 @@ import { formatIdr, parseIdrToNumber } from '@/lib/currency';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
 import { itemHref } from '@/lib/itemLink';
 import { slugify } from '@/lib/slug';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function NewItemPage() {
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Tambah Item tidak tersedia (Supabase belum diset)" />;
-  }
-
   return <NewItemPageInner />;
 }
 
@@ -110,14 +104,11 @@ function NewItemPageInner() {
 
     async function loadProfile() {
       setLoading(true);
-      const { data } = await supabase
-        .from('profiles')
-        .select('id,email,name,whatsapp,is_admin')
-        .eq('id', userId)
-        .single();
+      const res = await fetch('/api/profile');
+      const data = await res.json();
 
       if (cancelled) return;
-      setProfile((data as Profile) ?? null);
+      setProfile((data.profile as Profile) ?? null);
       setLoading(false);
     }
 
@@ -127,17 +118,8 @@ function NewItemPageInner() {
     };
   }, [authLoading, user?.id]);
 
-  async function pickUniqueSlug(base: string): Promise<string> {
-    const normalized = (base || 'item').replace(/-+/g, '-');
-    let candidate = normalized;
-
-    for (let suffix = 2; suffix < 5000; suffix++) {
-      const { data } = await supabase.from('items').select('id').eq('slug', candidate).limit(1).maybeSingle();
-      if (!data) return candidate;
-      candidate = `${normalized}-${suffix}`;
-    }
-
-    return `${normalized}-${crypto.randomUUID().slice(0, 8)}`;
+  function pickUniqueSlug(base: string): string {
+    return `${(base || 'item').replace(/-+/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -161,7 +143,7 @@ function NewItemPageInner() {
     let imageUrl: string | null = null;
 
     const baseSlug = slugify(title) || 'item';
-    const slug = await pickUniqueSlug(baseSlug);
+    const slug = pickUniqueSlug(baseSlug);
 
     if (imageFile) {
       let processed: File;
@@ -178,19 +160,19 @@ function NewItemPageInner() {
       const year = new Date().getFullYear();
       const path = `image/${year}/${safeBase}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage.from('item-images').upload(path, processed, {
-        upsert: false,
-        contentType: processed.type || undefined,
-      });
+      const form = new FormData();
+      form.set('file', processed);
+      form.set('path', path);
+      const uploadRes = await fetch('/api/storage/upload', { method: 'POST', body: form });
+      const uploadData = await uploadRes.json();
 
-      if (uploadError) {
+      if (!uploadRes.ok) {
         setSaving(false);
-        setError(`Upload image gagal: ${uploadError.message}`);
+        setError(`Upload image gagal: ${uploadData.error ?? 'Unknown error'}`);
         return;
       }
 
-      const { data: publicUrl } = supabase.storage.from('item-images').getPublicUrl(path);
-      imageUrl = publicUrl.publicUrl;
+      imageUrl = uploadData.publicUrl;
     }
 
     const payload = {
@@ -207,23 +189,20 @@ function NewItemPageInner() {
       status: 'pending',
     };
 
-    const insertRes = await supabase.from('items').insert(payload).select('id,slug').single();
-    const insertError = insertRes.error;
+    const insertRes = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const insertData = await insertRes.json();
 
     setSaving(false);
 
-    if (insertError) {
-      const msg = (insertError as PostgrestError).message || String(insertError);
-      if (msg.toLowerCase().includes('column') && msg.toLowerCase().includes('slug') && msg.toLowerCase().includes('does not exist')) {
-        setError('DB belum punya kolom slug. Jalankan SQL migration slug di SUPABASE_SETUP.md lalu coba lagi.');
-      } else {
-        setError(msg);
-      }
+    if (!insertRes.ok) {
+      setError(insertData.error ?? 'Gagal menyimpan item');
       return;
     }
 
-    // Redirect to newly created item (will be pending).
-    // Use slug to avoid relying on RETURNING when RLS/permissions are strict.
     router.replace(itemHref({ id: slug, slug }));
   }
 
@@ -376,9 +355,12 @@ function NewItemPageInner() {
                 </div>
               </div>
               {imagePreviewUrl ? (
-                <img
+                <Image
                   src={imagePreviewUrl}
                   alt="Preview"
+                  width={160}
+                  height={160}
+                  unoptimized
                   className="mt-3 h-40 w-40 rounded-xl border border-border object-cover shadow-sm"
                 />
               ) : null}

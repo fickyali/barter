@@ -1,0 +1,5 @@
+{
+  "name": "barter",
+  "private": true,
+  "workspaces": ["apps/web"]
+}

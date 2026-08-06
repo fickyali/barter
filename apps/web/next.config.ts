@@ -1,14 +1,16 @@
+import path from 'node:path';
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: 'standalone',
+  turbopack: { root: path.join(__dirname, '../..') },
   reactCompiler: true,
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'cfarlwejjecteqtzxxwy.supabase.co',
-        pathname: '/storage/v1/object/public/**',
+        hostname: 'pub-d58df7a0af594baf922fa7cb28ba1b40.r2.dev',
+        pathname: '/**',
       },
     ],
   },

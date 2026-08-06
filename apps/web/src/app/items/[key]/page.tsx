@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
 import type { Metadata } from 'next';
+
+import { query } from '@/lib/db';
 
 import { isSlug } from '@/lib/slug';
 import { isUuid } from '@/lib/uuid';
@@ -26,29 +27,20 @@ function toMetaDescription(input: string | null | undefined) {
 }
 
 async function fetchItemForMetadata(key: string): Promise<ItemMetaRow | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
   if (!isUuid(key) && !isSlug(key)) return null;
 
-  const supabase = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const query = supabase
-    .from('items')
-    .select('id,slug,title,description,image_url,status')
-    .limit(1);
-
-  const res = isUuid(key) ? await query.eq('id', key).maybeSingle() : await query.eq('slug', key).maybeSingle();
-  if (res.error) return null;
-  return (res.data as ItemMetaRow) ?? null;
+  const rows = await query<ItemMetaRow>(
+    isUuid(key)
+      ? 'select id,slug,title,description,image_url,status from items where id = $1 limit 1'
+      : 'select id,slug,title,description,image_url,status from items where slug = $1 limit 1',
+    [key]
+  );
+  return rows[0] ?? null;
 }
 
-export async function generateMetadata({ params }: { params: { key: string } }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ key: string }> }): Promise<Metadata> {
   const siteUrl = getSiteUrl();
-  const { key } = await Promise.resolve(params as unknown as { key: string });
+  const { key } = await params;
   const fallback: Metadata = {
     title: 'Item | Barter',
     description: 'Lihat detail item barter.',
@@ -88,7 +80,7 @@ export async function generateMetadata({ params }: { params: { key: string } }):
   };
 }
 
-export default async function ItemDetailPage({ params }: { params: { key: string } }) {
-  const { key } = await Promise.resolve(params as unknown as { key: string });
+export default async function ItemDetailPage({ params }: { params: Promise<{ key: string }> }) {
+  const { key } = await params;
   return <ItemDetailClient itemKey={key} />;
 }

@@ -9,8 +9,6 @@ import { NavBar } from '@/components/NavBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useAuth } from '@/lib/useAuth';
 
@@ -55,7 +53,6 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     if (authLoading) return;
 
     let cancelled = false;
@@ -65,18 +62,12 @@ export default function HomePage() {
       setError(null);
 
       const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      const itemsRes = await supabase
-        .from('items')
-        .select('*')
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      const itemsRes = await fetch(`/api/items?limit=${PAGE_SIZE}&offset=${from}`);
+      const itemsData = await itemsRes.json();
 
       if (cancelled) return;
-      if (itemsRes.error) setError(itemsRes.error.message);
-      const pageItems = (itemsRes.data as Item[]) ?? [];
+      if (!itemsRes.ok) setError(itemsData.error ?? 'Gagal memuat item');
+      const pageItems = (itemsData.items as Item[]) ?? [];
       setItems(pageItems);
       setHasNext(pageItems.length === PAGE_SIZE);
 
@@ -87,16 +78,13 @@ export default function HomePage() {
         return;
       }
 
-      const profileRes = await supabase
-        .from('profiles')
-        .select('id,email,name,whatsapp,is_admin')
-        .eq('id', userId)
-        .single();
+      const profileRes = await fetch('/api/profile');
+      const profileData = await profileRes.json();
 
       if (cancelled) return;
 
-      if (profileRes.error) setError(profileRes.error.message);
-      setProfile((profileRes.data as Profile) ?? null);
+      if (!profileRes.ok) setError(profileData.error ?? 'Gagal memuat profil');
+      setProfile((profileData.profile as Profile) ?? null);
       setLoading(false);
     }
 
@@ -109,9 +97,6 @@ export default function HomePage() {
 
   if (authLoading) return <Loading />;
 
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Supabase belum diset (Preview)" />;
-  }
 
   return (
     <div className="min-h-screen bg-background">

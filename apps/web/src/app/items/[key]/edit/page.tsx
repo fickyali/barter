@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { use, useEffect, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Loading } from '@/components/Loading';
@@ -12,22 +12,17 @@ import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { formatIdr, formatIdrFromUnknown, parseIdrToNumber } from '@/lib/currency';
+import { r2ImageSrc } from '@/lib/imageSrc';
 import { itemHref } from '@/lib/itemLink';
 import { extensionForMime, prepareImageForUpload } from '@/lib/imageUpload';
 import { useImageUpload } from '../useImageUpload';
 import { isSlug } from '@/lib/slug';
-import { extractPublicBucketObjectPath } from '@/lib/storage';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { extractPublicObjectPath } from '@/lib/storage';
 import type { Item, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { isUuid } from '@/lib/uuid';
 
 export default function EditItemPage({ params }: { params: { key: string } }) {
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Edit Item tidak tersedia (Supabase belum diset)" />;
-  }
-
   return <EditItemPageInner params={params} />;
 }
 
@@ -85,8 +80,6 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     imageFile,
     imagePreviewUrl,
     error,
-    setImageFile,
-    setImagePreviewUrl,
     setError,
     onPickImageFile,
     reset: resetImageUpload,
@@ -114,33 +107,25 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       setLoading(true);
       setError(null);
 
-      const meRes = await supabase
-        .from('profiles')
-        .select('id,email,name,whatsapp,is_admin')
-        .eq('id', userId)
-        .single();
-
-      const itemQuery = supabase.from('items').select('*');
-      const itemRes = isUuid(key)
-        ? await itemQuery.eq('id', key).single()
-        : await itemQuery.eq('slug', key).single();
+      const [meRes, itemRes] = await Promise.all([fetch('/api/profile'), fetch(`/api/items/${encodeURIComponent(key)}`)]);
+      const [meData, itemData] = await Promise.all([meRes.json(), itemRes.json()]);
 
       if (cancelled) return;
 
-      if (meRes.error) {
-        setError(meRes.error.message);
+      if (!meRes.ok) {
+        setError(meData.error ?? 'Gagal memuat profile');
         setLoading(false);
         return;
       }
 
-      if (itemRes.error) {
-        setError(itemRes.error.message);
+      if (!itemRes.ok) {
+        setError(itemData.error ?? 'Gagal memuat item');
         setLoading(false);
         return;
       }
 
-      const loadedItem = itemRes.data as Item;
-      setMe(meRes.data as Profile);
+      const loadedItem = itemData.item as Item;
+      setMe(meData.profile as Profile);
       setItem(loadedItem);
 
       setTitle(loadedItem.title);
@@ -160,7 +145,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, key, keyIsValid, user]);
+  }, [authLoading, key, keyIsValid, resetImageUpload, setError, user]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -190,12 +175,8 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
 
     let imageUrl: string | null = item.image_url;
     const oldImageUrl = item.image_url;
-    const oldObjectPath = oldImageUrl
-      ? extractPublicBucketObjectPath(oldImageUrl, 'item-images')
-      : null;
+    const oldObjectPath = oldImageUrl ? extractPublicObjectPath(oldImageUrl) : null;
     let newObjectPath: string | null = null;
-    let newFolder: string | null = null;
-    let baseNameForCleanup: string | null = null;
 
     if (removeExistingImage && !imageFile) {
       // User wants to remove the old image and did not upload a new one
@@ -218,22 +199,20 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       const folder = `image/${year}`;
       const path = `${folder}/${safeBase}.${ext}`;
       newObjectPath = path;
-      newFolder = folder;
-      baseNameForCleanup = safeBase;
 
-      const { error: uploadError } = await supabase.storage.from('item-images').upload(path, processed, {
-        upsert: true,
-        contentType: processed.type || undefined,
-      });
+      const form = new FormData();
+      form.set('file', processed);
+      form.set('path', path);
+      const uploadRes = await fetch('/api/storage/upload', { method: 'POST', body: form });
+      const uploadData = await uploadRes.json();
 
-      if (uploadError) {
+      if (!uploadRes.ok) {
         setSaving(false);
-        setError(`Upload image gagal: ${uploadError.message}`);
+        setError(`Upload image gagal: ${uploadData.error ?? 'Unknown error'}`);
         return;
       }
 
-      const { data: publicUrl } = supabase.storage.from('item-images').getPublicUrl(path);
-      imageUrl = publicUrl.publicUrl;
+      imageUrl = uploadData.publicUrl;
     }
 
     const nextStatus = item.status === 'approved' ? 'pending' : item.status;
@@ -250,93 +229,25 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
       status: nextStatus,
     };
 
-    const updateRes = await supabase.from('items').update(payload).eq('id', item.id);
-    const updateError = updateRes.error;
-
+    const updateRes = await fetch(`/api/items/${encodeURIComponent(item.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const updateData = await updateRes.json();
 
     setSaving(false);
 
-    if (updateError) {
-      setError(updateError.message);
+    if (!updateRes.ok) {
+      setError(updateData.error ?? 'Gagal menyimpan item');
       return;
     }
 
-    // Reset image state after successful submit (including error)
     resetImageUpload();
     setRemoveExistingImage(false);
 
-    // If user uploaded a new image, clean up older files that share the same slug base.
-    // Or if user requested to remove the old image (and didn't upload a new one), also delete old image.
-    if (imageFile || (removeExistingImage && oldObjectPath)) {
-      const foldersToCheck = new Set<string>();
-
-      if (newFolder) foldersToCheck.add(newFolder);
-      if (oldObjectPath) {
-        const oldFolder = oldObjectPath.split('/').slice(0, -1).join('/');
-        if (oldFolder) foldersToCheck.add(oldFolder);
-      }
-
-      const removePaths = new Set<string>();
-
-      // Always try common extension variants (Supabase Storage won't automatically remove the old ext).
-      // This fixes cases like first upload: dompet-lama.jpg, then replace: dompet-lama.png.
-      const possibleExts = ['jpg', 'jpeg', 'png'];
-      if (baseNameForCleanup) {
-        for (const folder of foldersToCheck) {
-          for (const ext of possibleExts) {
-            const candidate = `${folder}/${baseNameForCleanup}.${ext}`;
-            if (newObjectPath && candidate === newObjectPath) continue;
-            removePaths.add(candidate);
-          }
-        }
-      }
-
-      // Always prefer deleting the exact old object path if it's different.
-      if (oldObjectPath && (imageFile ? oldObjectPath !== newObjectPath : true)) {
-        removePaths.add(oldObjectPath);
-      }
-
-      // Also best-effort: list and delete any sibling objects in the same folder that start with the same base name.
-      // This handles unexpected extensions or older naming conventions.
-      if (baseNameForCleanup) {
-        for (const folder of foldersToCheck) {
-          const { data: objects, error: listError } = await supabase.storage
-            .from('item-images')
-            .list(folder, { limit: 200 });
-
-          if (listError) {
-            console.error('Failed to list Storage folder for cleanup:', listError);
-            setError(
-              `Item berhasil disimpan, tapi gagal memeriksa foto lama di Storage: ${listError.message}. ` +
-                'Pastikan policy Storage bucket item-images mengizinkan select/list.'
-            );
-            return;
-          }
-
-          for (const obj of objects ?? []) {
-            if (!obj?.name) continue;
-            if (!obj.name.startsWith(`${baseNameForCleanup}.`)) continue;
-            const fullPath = `${folder}/${obj.name}`;
-            if (newObjectPath && fullPath === newObjectPath) continue;
-            removePaths.add(fullPath);
-          }
-        }
-      }
-
-      if (removePaths.size > 0) {
-        const { error: removeError } = await supabase.storage
-          .from('item-images')
-          .remove(Array.from(removePaths));
-
-        if (removeError) {
-          console.error('Failed to remove old image(s) from Storage:', removeError);
-          setError(
-            `Item berhasil disimpan, tapi gagal menghapus foto lama di Storage: ${removeError.message}. ` +
-              'Pastikan policy Storage bucket item-images mengizinkan delete untuk owner.'
-          );
-          return;
-        }
-      }
+    if (oldObjectPath && (removeExistingImage || imageFile) && oldObjectPath !== newObjectPath) {
+      await fetch(`/api/storage/object/${oldObjectPath}`, { method: 'DELETE' });
     }
 
     if (item.status === 'approved') {
@@ -528,9 +439,12 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
 
                 {imagePreviewUrl ? (
                   <div className="relative inline-block">
-                    <img
+                    <Image
                       src={imagePreviewUrl}
                       alt="Preview foto baru"
+                      width={160}
+                      height={160}
+                      unoptimized
                       className="mt-3 h-40 w-40 rounded-xl border border-border object-cover shadow-sm"
                     />
                     <button
@@ -545,7 +459,7 @@ function EditItemPageInner({ params }: { params: { key: string } }) {
                 ) : (!removeExistingImage && item?.image_url) ? (
                   <div className="relative mt-3 inline-block overflow-hidden rounded-xl border border-border bg-surface2">
                     <Image
-                      src={item.image_url + '?t=' + Date.now()}
+                      src={r2ImageSrc(item.image_url) ?? ''}
                       alt="Foto saat ini"
                       width={320}
                       height={320}

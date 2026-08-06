@@ -10,12 +10,10 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
 import { formatIdrFromUnknown } from '@/lib/currency';
+import { r2ImageSrc } from '@/lib/imageSrc';
 import { itemEditHref } from '@/lib/itemLink';
 import { isSlug } from '@/lib/slug';
-import { extractPublicBucketObjectPath } from '@/lib/storage';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useAuth } from '@/lib/useAuth';
 import { isUuid } from '@/lib/uuid';
@@ -54,7 +52,6 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
   }, [owner?.whatsapp]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     if (authLoading) return;
     if (!keyIsValid) return;
 
@@ -64,56 +61,30 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
       setLoading(true);
       setError(null);
 
-      const itemQuery = supabase.from('items').select('*');
-      const itemRes = isUuid(itemKey)
-        ? await itemQuery.eq('id', itemKey).single()
-        : await itemQuery.eq('slug', itemKey).single();
+      const [itemRes, meRes] = await Promise.all([
+        fetch(`/api/items/${encodeURIComponent(itemKey)}`),
+        user?.id ? fetch('/api/profile') : Promise.resolve(null),
+      ]);
+      const itemData = await itemRes.json();
+      const meData = meRes ? await meRes.json() : null;
 
       if (cancelled) return;
 
-      if (itemRes.error) {
-        setError(itemRes.error.message);
+      if (!itemRes.ok) {
+        setError(itemData.error ?? 'Gagal memuat item');
         setLoading(false);
         return;
       }
 
-      const loadedItem = itemRes.data as Item;
-      setItem(loadedItem);
-
-      const userId = user?.id;
-      if (userId) {
-        const meRes = await supabase
-          .from('profiles')
-          .select('id,email,name,whatsapp,is_admin')
-          .eq('id', userId)
-          .single();
-
-        if (!cancelled && meRes.error) {
-          setError(meRes.error.message);
-          setLoading(false);
-          return;
-        }
-
-        if (!cancelled) setMe(meRes.data as Profile);
-      } else {
-        setMe(null);
-      }
-
-      const ownerRes = await supabase
-        .from('profiles')
-        .select('id,email,name,whatsapp,is_admin')
-        .eq('id', loadedItem.user_id)
-        .single();
-
-      if (cancelled) return;
-
-      if (ownerRes.error) {
-        setError(ownerRes.error.message);
+      if (meRes && !meRes.ok) {
+        setError(meData.error ?? 'Gagal memuat profile');
         setLoading(false);
         return;
       }
 
-      setOwner(ownerRes.data as Profile);
+      setItem(itemData.item as Item);
+      setMe((meData?.profile as Profile | null) ?? null);
+      setOwner((itemData.owner as Profile | null) ?? null);
       setLoading(false);
     }
 
@@ -134,33 +105,17 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
     setDeleting(true);
     setError(null);
 
-    // Best-effort: delete image in Storage first (if it is a public URL from our bucket).
-    if (item.image_url) {
-      const objectPath = extractPublicBucketObjectPath(item.image_url, 'item-images');
-      if (objectPath) {
-        const { error: removeError } = await supabase.storage.from('item-images').remove([objectPath]);
-        if (removeError) {
-          setDeleting(false);
-          setError(`Gagal menghapus foto di Storage: ${removeError.message}`);
-          return;
-        }
-      }
-    }
-
-    const { error: deleteError } = await supabase.from('items').delete().eq('id', item.id);
+    const deleteRes = await fetch(`/api/items/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+    const deleteData = await deleteRes.json();
 
     setDeleting(false);
 
-    if (deleteError) {
-      setError(deleteError.message);
+    if (!deleteRes.ok) {
+      setError(deleteData.error ?? 'Gagal menghapus item');
       return;
     }
 
     router.replace('/');
-  }
-
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Detail item tidak tersedia (Supabase belum diset)" />;
   }
 
   if (authLoading || loading) return <Loading />;
@@ -213,7 +168,7 @@ export function ItemDetailClient({ itemKey }: { itemKey: string }) {
             {item.image_url ? (
               <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface2">
                 <Image
-                  src={item.image_url}
+                  src={r2ImageSrc(item.image_url) ?? ''}
                   alt={item.title}
                   width={1200}
                   height={800}

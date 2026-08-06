@@ -6,7 +6,6 @@ import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
-import { supabase } from '@/lib/supabaseClient';
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
@@ -46,7 +45,7 @@ export function NavBar({ isAdmin, isAuthed }: { isAdmin?: boolean; isAuthed?: bo
   }, [isAdmin, isAuthed]);
 
   async function onLogout() {
-    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/login');
   }
 
@@ -54,13 +53,7 @@ export function NavBar({ isAdmin, isAuthed }: { isAdmin?: boolean; isAuthed?: bo
     <div className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-2 select-none" aria-label="Barter.biz.id Home">
-          <img
-            src="https://cfarlwejjecteqtzxxwy.supabase.co/storage/v1/object/public/item-images/assets/iconx.png"
-            alt="Barter.biz.id Logo"
-            width={32}
-            height={32}
-            style={{ borderRadius: '8px' }}
-          />
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">B</span>
           <span className="text-sm font-semibold tracking-tight hidden sm:inline">Barter.biz.id</span>
         </Link>
 

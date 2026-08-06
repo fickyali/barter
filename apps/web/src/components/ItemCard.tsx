@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/Badge';
 import { formatIdrFromUnknown } from '@/lib/currency';
 import { itemHref } from '@/lib/itemLink';
+import { r2ImageSrc } from '@/lib/imageSrc';
 import type { Item } from '@/lib/types';
 
 export function ItemCard({
@@ -32,7 +33,7 @@ export function ItemCard({
           {item.image_url ? (
             <div className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface2">
               <Image
-                src={item.image_url}
+                src={r2ImageSrc(item.image_url) ?? ''}
                 alt={item.title}
                 width={120}
                 height={120}

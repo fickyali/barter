@@ -6,7 +6,7 @@ Versi: 1.0 (Sederhana)
 ## 1) Ringkasan
 Aplikasi ini memungkinkan user login, membuat listing barang untuk barter, melihat listing yang sudah disetujui (approved), serta menghubungi pemilik barang via tombol WhatsApp. Admin memiliki dashboard untuk memoderasi (approve/reject) listing.
 
-Back-end diasumsikan memakai Supabase (Auth, Postgres + RLS, Storage) sesuai skema SQL yang diberikan.
+Back-end memakai Next.js API routes, Postgres, dan Cloudflare R2.
 
 ## 2) Tujuan
 - User dapat membuat listing barang untuk barter (dengan foto opsional).
@@ -41,18 +41,18 @@ Back-end diasumsikan memakai Supabase (Auth, Postgres + RLS, Storage) sesuai ske
 
 ## 6) Data Model (mengacu skema)
 ### 6.1 `profiles`
-- `id` (UUID): sama dengan `auth.users.id`.
+- `id` (UUID): sama dengan `users.id`.
 - `email` (unique, not null)
 - `name` (nullable)
 - `whatsapp` (nullable) — nomor untuk tombol WhatsApp.
 - `is_admin` (bool)
 - `created_at`, `updated_at`
 
-Catatan: profile otomatis dibuat saat signup lewat trigger `handle_new_user()`.
+Catatan: profile otomatis dibuat saat signup lewat API register.
 
 ### 6.2 `items`
 - `id` UUID
-- `user_id` (FK ke auth.users)
+- `user_id` (FK ke users)
 - `title`, `description`, `category`, `condition` (required)
 - `wanted_item` (optional)
 - `barter_price` (optional) — teks, mis. “tambah 50rb” / “nego”.
@@ -60,22 +60,22 @@ Catatan: profile otomatis dibuat saat signup lewat trigger `handle_new_user()`.
 - `status` (`pending|approved|rejected`)
 - timestamps
 
-## 7) Permission & Security (RLS sesuai SQL)
-RLS yang diberikan menjadi sumber kebenaran.
+## 7) Permission & Security
+Next.js API routes menjadi sumber kebenaran akses.
 
 ### 7.1 Akses `profiles`
 - Siapa pun bisa SELECT profil.
-- User hanya bisa INSERT/UPDATE profil miliknya (`auth.uid() = id`).
+- User hanya bisa update profil miliknya.
 
 ### 7.2 Akses `items`
 - SELECT: semua orang bisa lihat `approved`; pemilik bisa lihat miliknya; admin bisa lihat semua.
-- INSERT: hanya user terautentikasi dan `auth.uid() = user_id`.
+- INSERT: hanya user terautentikasi.
 - UPDATE/DELETE: pemilik atau admin.
 
-### 7.3 Storage `item-images`
-- Public read.
-- Authenticated bisa upload.
-- Update/delete hanya untuk owner folder sesuai `auth.uid()`.
+### 7.3 Storage Cloudflare R2
+- Public read lewat R2 public URL.
+- Upload lewat API route terautentikasi.
+- Delete lewat API route terautentikasi.
 
 ## 8) User Experience & Informasi Arsitektur Halaman
 Aplikasi minimal memiliki 3 halaman utama sesuai request:
@@ -208,7 +208,7 @@ Rekomendasi v1: **Opsi B** agar konten yang berubah direview ulang.
 - Sebagai admin, saya bisa approve atau reject listing.
 
 ## 12) Requirement Non-Fungsional
-- **Keamanan**: patuh RLS, tidak ada admin-only data bocor di client.
+- **Keamanan**: akses admin wajib lewat server, tidak ada admin-only data bocor di client.
 - **Performa**: Home load < 2s untuk 100 item (paging sederhana).
 - **Reliability**: error handling untuk upload gambar dan fetch data.
 - **Usability**: form validation jelas dan pesan error ramah.
@@ -244,4 +244,4 @@ Rekomendasi v1: **Opsi B** agar konten yang berubah direview ulang.
 3) Apakah Home bisa diakses tanpa login? (SQL policy mengizinkan approved item dilihat “by everyone”; tapi requirement kamu bilang “home setelah login”.)
 
 ---
-Jika kamu mau, aku bisa bantu lanjut bikin wireframe sederhana + checklist endpoint/query Supabase untuk tiap halaman.
+Jika kamu mau, aku bisa bantu lanjut bikin wireframe sederhana + checklist endpoint/API untuk tiap halaman.

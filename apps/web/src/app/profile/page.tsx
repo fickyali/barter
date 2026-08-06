@@ -10,17 +10,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Container } from '@/components/ui/Container';
 import { Input } from '@/components/ui/Input';
-import { SupabaseNotConfigured } from '@/components/SupabaseNotConfigured';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import type { Item, Profile } from '@/lib/types';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { isWhatsappValid, normalizeWhatsapp } from '@/lib/whatsapp';
 
 export default function ProfilePage() {
-  if (!isSupabaseConfigured) {
-    return <SupabaseNotConfigured title="Profile tidak tersedia (Supabase belum diset)" />;
-  }
-
   return <ProfilePageInner />;
 }
 
@@ -50,32 +44,21 @@ function ProfilePageInner() {
       setError(null);
       setItemsError(null);
 
-      const [profileRes, myItemsRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id,email,name,whatsapp,is_admin')
-          .eq('id', userId)
-          .single(),
-        supabase
-          .from('items')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(100),
-      ]);
+      const [profileRes, myItemsRes] = await Promise.all([fetch('/api/profile'), fetch('/api/items/mine')]);
+      const [profileData, myItemsData] = await Promise.all([profileRes.json(), myItemsRes.json()]);
 
       if (cancelled) return;
 
-      if (profileRes.error) {
-        setError(profileRes.error.message);
+      if (!profileRes.ok) {
+        setError(profileData.error ?? 'Gagal memuat profile');
         setLoading(false);
         return;
       }
 
-      if (myItemsRes.error) setItemsError(myItemsRes.error.message);
-      setMyItems((myItemsRes.data as Item[]) ?? []);
+      if (!myItemsRes.ok) setItemsError(myItemsData.error ?? 'Gagal memuat item');
+      setMyItems((myItemsData.items as Item[]) ?? []);
 
-      const p = profileRes.data as Profile;
+      const p = profileData.profile as Profile;
       setProfile(p);
       setName(p.name ?? '');
       setWhatsapp(p.whatsapp ?? '');
@@ -104,18 +87,17 @@ function ProfilePageInner() {
 
     setSaving(true);
 
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        name: name.trim() || null,
-        whatsapp: normalized || null,
-      })
-      .eq('id', userId);
+    const updateRes = await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() || null, whatsapp: normalized || null }),
+    });
+    const updateData = await updateRes.json();
 
     setSaving(false);
 
-    if (updateError) {
-      setError(updateError.message);
+    if (!updateRes.ok) {
+      setError(updateData.error ?? 'Gagal menyimpan profile');
       return;
     }
 
