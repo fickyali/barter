@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,6 +43,11 @@ export default function LoginPage() {
     setLoading(false);
 
     if (!res.ok) {
+      if (data.error === 'EMAIL_NOT_VERIFIED') {
+        setError('Email kamu belum diverifikasi. Silakan verifikasi dulu.');
+        setUnverifiedEmail(data.email ?? email);
+        return;
+      }
       setError(data.error ?? 'Login gagal');
       return;
     }
@@ -82,7 +88,14 @@ export default function LoginPage() {
           </div>
 
           {error ? (
-            <div className="mt-4 rounded-xl border border-danger/20 bg-danger/5 p-3 text-sm text-danger">{error}</div>
+            <div className="mt-4 rounded-xl border border-danger/20 bg-danger/5 p-3 text-sm text-danger">
+              {error}{' '}
+              {unverifiedEmail ? (
+                <Link href={`/register?verify=1&email=${encodeURIComponent(unverifiedEmail)}`} className="font-medium underline">
+                  Verifikasi email
+                </Link>
+              ) : null}
+            </div>
           ) : null}
 
           <Button className="mt-4 w-full" variant="primary" disabled={loading} type="submit">

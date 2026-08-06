@@ -11,6 +11,24 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const user = await requireUser();
   const { name, whatsapp } = await request.json();
-  const rows = await query('update profiles set name = $1, whatsapp = $2, updated_at = now() where id = $3 returning id,email,name,whatsapp,is_admin', [name || null, whatsapp || null, user.id]);
+
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (name !== undefined) {
+    sets.push(`name = $${sets.length + 1}`);
+    values.push(name || null);
+  }
+  if (whatsapp === null) {
+    sets.push('whatsapp = null');
+  } else if (whatsapp !== undefined) {
+    return NextResponse.json({ error: 'WhatsApp harus diverifikasi lewat kode OTP' }, { status: 400 });
+  }
+  if (sets.length === 0) {
+    return NextResponse.json({ error: 'Tidak ada field yang diubah' }, { status: 400 });
+  }
+
+  sets.push('updated_at = now()');
+  values.push(user.id);
+  const rows = await query(`update profiles set ${sets.join(', ')} where id = $${values.length} returning id,email,name,whatsapp,is_admin`, values);
   return NextResponse.json({ profile: rows[0] });
 }
