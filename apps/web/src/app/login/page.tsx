@@ -89,9 +89,15 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Login'}
           </Button>
 
-          <div className="text-center text-sm text-gray-600">
+          <div className="mt-3 text-center text-sm">
+            <Link href="/reset-password" className="font-medium text-muted-strong hover:underline">
+              Lupa password?
+            </Link>
+          </div>
+
+          <div className="mt-3 text-center text-sm text-muted">
             Belum punya akun?{' '}
-            <Link href="/register" className="font-medium text-gray-900 hover:underline">
+            <Link href="/register" className="font-medium text-foreground hover:underline">
               Register
             </Link>
           </div>
