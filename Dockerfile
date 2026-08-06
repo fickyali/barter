@@ -1,16 +1,14 @@
 FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-COPY apps/web/package.json apps/web/package.json
-RUN npm ci --workspaces --include-workspace-root
+WORKDIR /app/apps/web
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
 
 FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS builder
-WORKDIR /app
+WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY . .
-RUN npm run build --workspace=web
+COPY --from=deps /app/apps/web/node_modules ./node_modules
+COPY apps/web ./
+RUN npm run build
 
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
